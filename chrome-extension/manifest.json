@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "CodeHint Assistant",
+  "version": "1.0",
+  "description": "Provides hints and similar problems for LeetCode and HackerRank.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": [
+    "https://leetcode.com/*",
+    "https://www.hackerrank.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://leetcode.com/*",
+        "https://www.hackerrank.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
+
