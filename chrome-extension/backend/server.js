@@ -9,10 +9,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Test endpoint
 app.get('/', (req, res) => {
   res.send('🚀 CodeHint Assistant Backend Running!');
 });
 
+// Main API endpoint
 app.post('/generate-hint', (req, res) => {
   const { problem, platform } = req.body;
 
@@ -20,10 +22,17 @@ app.post('/generate-hint', (req, res) => {
     return res.status(400).json({ error: 'Missing problem or platform' });
   }
 
-  const dummyHint = `Think about which data structure would best suit solving "${problem}" on ${platform}.`;
+  // 🧠 Return multiple dummy hints instead of one
+  const dummyHints = [
+    `Think about which data structure would best suit solving "${problem}" on ${platform}.`,
+    `Is there a greedy or dynamic programming approach that could help?`,
+    `Try breaking down the problem into smaller subproblems.`,
+    `What is the time complexity you're aiming for?`
+  ];
 
+  // ✅ Send the array of hints
   return res.json({
-    hint: dummyHint,
+    hints: dummyHints,
     source: 'static-express',
     problem,
     platform
@@ -33,3 +42,4 @@ app.post('/generate-hint', (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
 });
+
