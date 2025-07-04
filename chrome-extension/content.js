@@ -1,7 +1,7 @@
 (function detectProblem() {
   const url = window.location.href;
 
-  // ✅ CASE 1: LeetCode
+  // CASE 1: LeetCode
   if (url.includes("leetcode.com/problems/")) {
     const parts = url.split("/");
     const slug = parts[parts.indexOf("problems") + 1];
@@ -19,22 +19,18 @@
     }
   }
 
-  // ✅ CASE 2: HackerRank (very basic version)
-  else if (url.includes("hackerrank.com/challenges/")) {
-    const parts = url.split("/");
-    const slug = parts[parts.indexOf("challenges") + 1];
-
-    if (slug) {
-      const title = slug
-        .split("-")
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ");
-
-      chrome.storage.local.set({
-        currentProblem: title,
-        platform: "hackerrank"
-      });
-    }
-  }
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
 

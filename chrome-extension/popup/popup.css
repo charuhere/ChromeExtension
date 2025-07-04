@@ -25,7 +25,7 @@ h2 {
 
 #nextHint {
   padding: 6px 12px;
-  background-color: #4CAF50;
+  background-color: #b83d3d;
   border: none;
   border-radius: 4px;
   color: white;
@@ -34,7 +34,7 @@ h2 {
 }
 
 #nextHint:hover {
-  background-color: #45a049;
+  background-color: #41ade2;
 }
 
 #recommendations {

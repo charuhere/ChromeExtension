@@ -1,6 +1,7 @@
 let currentHintIndex = 0;
 let hintList = [];
 
+
 chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem, platform }) => {
   if (currentProblem && platform) {
     document.getElementById("title").innerText = `Problem: ${currentProblem}`;
@@ -16,12 +17,13 @@ chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem
 
       const data = await response.json();
 
-      if (data.hint) {
-        hintList = [data.hint]; // start with one hint from backend
+      if (data.hints && data.hints.length > 0) {
+        // ✅ Save all the hints from backend
+        hintList = data.hints;
         currentHintIndex = 0;
         document.getElementById("hint").innerText = hintList[0];
       } else {
-        document.getElementById("hint").innerText = "No hint received.";
+        document.getElementById("hint").innerText = "No hints received.";
       }
 
     } catch (err) {
@@ -34,7 +36,6 @@ chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem
   }
 });
 
-// For now, 'Next Hint' just repeats the current one or shows no more
 document.getElementById("nextHint").addEventListener("click", () => {
   if (currentHintIndex < hintList.length - 1) {
     currentHintIndex++;
@@ -43,3 +44,5 @@ document.getElementById("nextHint").addEventListener("click", () => {
     document.getElementById("hint").innerText = "No more hints available!";
   }
 });
+
+

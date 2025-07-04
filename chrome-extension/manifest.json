@@ -15,11 +15,12 @@
   "content_scripts": [
     {
       "matches": [
-        "https://leetcode.com/*",
-        "https://www.hackerrank.com/*"
+        "https://leetcode.com/*"
       ],
       "js": ["content.js"]
     }
   ]
 }
+
+
 
