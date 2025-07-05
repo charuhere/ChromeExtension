@@ -1,46 +1,54 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: './.env' });
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-dotenv.config();
+
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
-// Test endpoint
+// Initialize Gemini client
+const genAI = new GoogleGenerativeAI("AIzaSyBpbBi2BMQDBtOIiEwGZ_XgwlzXMBm16Xk");
+
 app.get('/', (req, res) => {
-  res.send('🚀 CodeHint Assistant Backend Running!');
+  res.send('🚀 CodeHint Assistant Backend with Gemini is running!');
 });
 
-// Main API endpoint
-app.post('/generate-hint', (req, res) => {
+app.post('/generate-hint', async (req, res) => {
   const { problem, platform } = req.body;
 
   if (!problem || !platform) {
     return res.status(400).json({ error: 'Missing problem or platform' });
   }
 
-  // 🧠 Return multiple dummy hints instead of one
-  const dummyHints = [
-    `Think about which data structure would best suit solving "${problem}" on ${platform}.`,
-    `Is there a greedy or dynamic programming approach that could help?`,
-    `Try breaking down the problem into smaller subproblems.`,
-    `What is the time complexity you're aiming for?`
-  ];
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  // ✅ Send the array of hints
-  return res.json({
-    hints: dummyHints,
-    source: 'static-express',
-    problem,
-    platform
-  });
+   const prompt = `Give exactly 3 concise and focused coding hints for solving the problem "${problem}" on ${platform}. Each hint should be short, direct, and spark problem-solving ideas. Do not include any introduction or explanation. Return only the 3 hints as separate bullet points.`;
+
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    const hints = text.split("\n").filter(line => line.trim() !== "");
+
+    return res.json({
+      hints,
+      source: 'gemini',
+      problem,
+      platform
+    });
+  } catch (err) {
+    console.error('Gemini API error:', err);
+    return res.status(500).json({ error: 'Failed to generate hint' });
+  }
 });
 
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
 });
-
-
