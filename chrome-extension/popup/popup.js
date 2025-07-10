@@ -1,9 +1,12 @@
 let currentHintIndex = 0;
 let hintList = [];
 
+const totalSection = document.querySelector(".total");
+
 
 chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem, platform }) => {
   if (currentProblem && platform) {
+    totalSection.style.display = "block";
     document.getElementById("title").innerText = `Problem: ${currentProblem}`;
 
     try {
