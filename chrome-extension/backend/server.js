@@ -49,6 +49,39 @@ app.post('/generate-hint', async (req, res) => {
   }
 });
 
+app.post('/similar-problems', async (req, res) => {
+const { problem, platform } = req.body;
+
+if (!problem || !platform) {
+return res.status(400).json({ error: 'Missing problem or platform' });
+}
+
+try {
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const prompt = `Suggest 3 coding problems that are conceptually or algorithmically similar to "${problem}" on ${platform}. Include one easier, one medium, and one harder problem to help learners improve progressively. Return only the list in the following Markdown format:
+
+• Problem Title 1
+• Problem Title 2
+• Problem Title 3
+
+Don't add any introduction, explanation, or extra content. Just return exactly this list in bullet-point format.`
+
+const result = await model.generateContent(prompt);
+const text = result.response.text();
+
+// Process output into a clean array of problem titles
+const similarProblems = text
+  .split("\n")
+  .map(line => line.replace(/^[-*\d.]+\s*/, "").trim()) // remove bullet formatting
+  .filter(line => line.length > 0);
+
+return res.json({ similarProblems });
+} catch (err) {
+console.error("Gemini API error in similar-problems:", err);
+return res.status(500).json({ error: 'Failed to generate similar problems' });
+}
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
 });

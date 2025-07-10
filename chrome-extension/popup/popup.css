@@ -1,14 +1,18 @@
 body {
-  font-family: Arial, sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   padding: 15px;
   width: 300px;
-  background-color: #f9f9f9;
-  color: #333;
+  background-color: #1a1a1a;  /* deep gray background */
+  color: #cf1919;             /* soft light text */
+  border-radius: 12px;
 }
 
 h2 {
   font-size: 18px;
   margin-bottom: 10px;
+  color: #ffffff;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
 }
 
 #hint-section {
@@ -18,33 +22,44 @@ h2 {
 #hint {
   font-size: 14px;
   margin: 8px 0;
-  padding: 6px;
-  background-color: #e0e0e0;
-  border-radius: 4px;
+  padding: 10px;
+  background-color: #2a2a2a;   /* slightly lighter background box */
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  color: #f5f5f5;
+  line-height: 1.5;
 }
 
 #nextHint {
-  padding: 6px 12px;
-  background-color: #b83d3d;
+  padding: 8px 14px;
+  background-color: #4f46e5;   /* indigo button */
   border: none;
-  border-radius: 4px;
-  color: white;
-  font-weight: bold;
+  border-radius: 6px;
+  color: #ffffff;
+  font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
 #nextHint:hover {
-  background-color: #41ade2;
+  background-color: #4338ca;   /* darker indigo on hover */
 }
 
 #recommendations {
   margin-top: 20px;
 }
 
+#recommendations p {
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #cccccc;
+}
+
 #recommendations ul {
   list-style-type: disc;
   padding-left: 20px;
   font-size: 14px;
+  color: #b0b0b0;
 }
 
 .total {
