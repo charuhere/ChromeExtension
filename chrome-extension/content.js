@@ -13,7 +13,6 @@
       }
     }
     
-
     return null;
   }
 
@@ -30,7 +29,6 @@
     } else {
       chrome.storage.local.remove(["currentProblem", "platform"]);
       console.log("[CodeHint] Not a problem page. Storage cleared.");
-      document.getElementById("title").innerText = "Problem not detected.";
     }
   }
 
@@ -50,5 +48,4 @@
 
   console.log("[CodeHint] MutationObserver initialized.");
 })();
-
 
