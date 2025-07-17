@@ -193,6 +193,17 @@ function isHintComplete(text, hintNumber) {
   return hasNextHint || (hintNumber === 3 && text.length > 100);
 }
 
+// Helper function to clean problem titles
+function cleanProblemTitle(title) {
+  if (!title) return '';
+  
+  return title
+    .replace(/^(Problem\s+\d+:\s*|•\s*|\*\s*|\d+\.\s*)/i, '') // Remove "Problem X:", bullets, numbers
+    .replace(/\s*\(.*?\)\s*/g, '') // Remove parentheses content
+    .replace(/\s*-\s*(Easy|Medium|Hard)\s*/gi, '') // Remove difficulty indicators
+    .trim();
+}
+
 // Streaming endpoint for similar problems
 app.post('/similar-problems-stream', async (req, res) => {
   const { problem, platform } = req.body;
@@ -213,47 +224,75 @@ app.post('/similar-problems-stream', async (req, res) => {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    const prompt = `Suggest 3 coding problems that are conceptually or algorithmically similar to "${problem}" on ${platform}. Include one easier, one medium, and one harder problem to help learners improve progressively. Format each problem clearly with "Problem 1:", "Problem 2:", "Problem 3:" prefixes. Don't add any introduction, explanation, or extra content.`;
+    const prompt = `Suggest 3 coding problems that are conceptually or algorithmically similar to "${problem}" on ${platform}. Include one easier, one medium, and one harder problem to help learners improve progressively. 
+
+For each problem, provide ONLY the problem title exactly as it appears on LeetCode (without difficulty labels or extra descriptions). Format each problem clearly with "Problem 1:", "Problem 2:", "Problem 3:" prefixes.
+
+Example format:
+Problem 1: Two Sum
+Problem 2: 3Sum
+Problem 3: 4Sum
+
+Don't add any introduction, explanation, difficulty indicators, or extra content. Just the clean problem titles.`;
 
     // Generate content with streaming
     const result = await model.generateContentStream(prompt);
     
-    let problemNumber = 0;
-    let currentProblem = '';
-    let buffer = '';
+    let fullResponse = '';
+    let problems = {};
+    let currentProblemNumber = 0;
     
     // Process streaming response from Gemini
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
-      buffer += chunkText;
+      fullResponse += chunkText;
       
-      // Check for problem boundaries
-      const problemMatch = buffer.match(/Problem\s+(\d+):/);
-      if (problemMatch) {
-        // If we have a previous problem, complete it
-        if (currentProblem.trim() && problemNumber > 0) {
-          res.write(`data: ${JSON.stringify({ type: 'problem_complete', problem: currentProblem.trim(), number: problemNumber })}\n\n`);
+      // Look for problem patterns in the accumulated response
+      const problemMatches = [...fullResponse.matchAll(/Problem\s+(\d+):\s*([^\n\r]*)/g)];
+      
+      for (const match of problemMatches) {
+        const problemNumber = parseInt(match[1]);
+        const problemTitle = cleanProblemTitle(match[2]);
+        
+        // If this is a new problem we haven't seen before
+        if (!problems[problemNumber] && problemTitle) {
+          problems[problemNumber] = '';
+          currentProblemNumber = problemNumber;
+          
+          res.write(`data: ${JSON.stringify({ 
+            type: 'problem_start', 
+            number: problemNumber 
+          })}\n\n`);
         }
         
-        // Start new problem
-        problemNumber = parseInt(problemMatch[1]);
-        currentProblem = '';
-        res.write(`data: ${JSON.stringify({ type: 'problem_start', number: problemNumber })}\n\n`);
-        
-        // Remove the "Problem X:" part from buffer
-        buffer = buffer.replace(/Problem\s+\d+:\s*/, '');
-      }
-      
-      // Send token if we're in a problem
-      if (problemNumber > 0 && chunkText) {
-        currentProblem += chunkText;
-        res.write(`data: ${JSON.stringify({ type: 'problem_token', token: chunkText, number: problemNumber })}\n\n`);
+        // Update the current problem content
+        if (problems[problemNumber] !== undefined) {
+          problems[problemNumber] = problemTitle;
+          
+          // Send incremental update
+          res.write(`data: ${JSON.stringify({ 
+            type: 'problem_token', 
+            token: problemTitle, 
+            number: problemNumber 
+          })}\n\n`);
+        }
       }
     }
     
-    // Send final problem completion
-    if (currentProblem.trim() && problemNumber > 0) {
-      res.write(`data: ${JSON.stringify({ type: 'problem_complete', problem: currentProblem.trim(), number: problemNumber })}\n\n`);
+    // Final processing - send completed problems
+    const sortedProblems = Object.keys(problems)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .filter(key => problems[key] && problems[key].trim().length > 0);
+    
+    for (const problemNumber of sortedProblems) {
+      const cleanTitle = cleanProblemTitle(problems[problemNumber]);
+      if (cleanTitle) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'problem_complete', 
+          problem: cleanTitle, 
+          number: parseInt(problemNumber) 
+        })}\n\n`);
+      }
     }
     
     res.write('data: {"type": "done"}\n\n');
@@ -269,4 +308,3 @@ app.post('/similar-problems-stream', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
 });
-
