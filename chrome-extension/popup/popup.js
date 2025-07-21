@@ -1,12 +1,27 @@
 let currentHintIndex = 0;
 let hintList = [];
 let isStreaming = false;
+let currentView = 'menu'; // 'menu', 'hints', 'similar'
 
-const totalSection = document.querySelector(".total");
-const titleElement = document.getElementById("title");
-const hintElement = document.getElementById("hint");
-const nextHintBtn = document.getElementById("nextHint");
-const similarList = document.getElementById("similarList");
+// DOM elements
+const problemTitle = document.getElementById("problemTitle");
+const menuView = document.getElementById("menuView");
+const hintsView = document.getElementById("hintsView");
+const similarView = document.getElementById("similarView");
+
+// Menu buttons
+const getHintsBtn = document.getElementById("getHintsBtn");
+const viewSimilarBtn = document.getElementById("viewSimilarBtn");
+const analyzeCodeBtn = document.getElementById("analyzeCodeBtn");
+
+// Hints view elements
+const hintContent = document.getElementById("hintContent");
+const nextHintBtn = document.getElementById("nextHintBtn");
+const backFromHintsBtn = document.getElementById("backFromHintsBtn");
+
+// Similar problems view elements
+const similarProblemsContainer = document.getElementById("similarProblemsContainer");
+const backFromSimilarBtn = document.getElementById("backFromSimilarBtn");
 
 // Helper function to convert problem title to LeetCode URL
 function convertToLeetCodeUrl(problemTitle) {
@@ -30,68 +45,151 @@ function convertToLeetCodeUrl(problemTitle) {
   return `https://leetcode.com/problems/${slug}/`;
 }
 
-// First, check if we're on a LeetCode problem page
+// View management functions
+function showView(viewName) {
+  // Hide all views
+  menuView.style.display = 'none';
+  hintsView.style.display = 'none';
+  similarView.style.display = 'none';
+  
+  // Show requested view
+  switch(viewName) {
+    case 'menu':
+      menuView.style.display = 'block';
+      break;
+    case 'hints':
+      hintsView.style.display = 'block';
+      break;
+    case 'similar':
+      similarView.style.display = 'block';
+      break;
+  }
+  
+  currentView = viewName;
+}
+
+// Initialize the extension
 chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
   const currentTab = tabs[0];
   const isLeetCodeProblemPage = currentTab.url.includes("leetcode.com/problems/") && !currentTab.url.includes("problemset");
   
   if (!isLeetCodeProblemPage) {
     // If not on a problem page, show "Problem not detected" with link
-    totalSection.style.display = "none";
-    titleElement.innerHTML = `
-      Problem not detected.<br>
-      <a href="#" id="goToLeetCode" style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 14px;">
+    problemTitle.innerHTML = `
+      Problem not detected<br>
+      <a href="#" id="goToLeetCode" style="color: #1976d2; text-decoration: underline; cursor: pointer; font-size: 14px; margin-top: 8px; display: inline-block;">
         Go to LeetCode Problems
       </a>
     `;
+    
+    // Hide menu buttons
+    menuView.style.display = 'none';
     
     // Add click handler for the link
     document.getElementById("goToLeetCode").addEventListener("click", (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: "https://leetcode.com/problemset/all/" });
-      window.close(); // Close the popup after redirecting
+      window.close();
     });
     
     return;
   }
   
-  // If on a problem page, check storage
+  // If on a problem page, check storage and show menu
   chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem, platform }) => {
     if (currentProblem && platform) {
-      totalSection.style.display = "block";
-      titleElement.innerText = `Problem: ${currentProblem}`;
-
-      try {
-        // Start streaming hints and similar problems concurrently
-        await Promise.all([
-          streamHints(currentProblem, platform),
-          streamSimilarProblems(currentProblem, platform)
-        ]);
-
-      } catch (err) {
-        console.error("Error:", err);
-        hintElement.innerText = "Something went wrong while fetching data.";
-        similarList.innerHTML = "<li>Error loading similar problems.</li>";
-      }
+      problemTitle.textContent = currentProblem;
+      showView('menu');
     } else {
-      totalSection.style.display = "none";
-      titleElement.innerText = "Problem not detected.";
+      problemTitle.textContent = "Problem not detected";
+      menuView.style.display = 'none';
     }
   });
 });
+
+// Button event listeners
+getHintsBtn.addEventListener("click", async () => {
+  showView('hints');
+  hintContent.innerHTML = '<div style="text-align: center; color: #666;">🔄 Loading hints...</div>';
+  
+  try {
+    chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem, platform }) => {
+      if (currentProblem && platform) {
+        await streamHints(currentProblem, platform);
+      }
+    });
+  } catch (error) {
+    console.error("Error loading hints:", error);
+    hintContent.innerHTML = '<div style="color: #f44336;">Error loading hints. Please try again.</div>';
+  }
+});
+
+viewSimilarBtn.addEventListener("click", async () => {
+  showView('similar');
+  similarProblemsContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">🔄 Finding similar problems...</div>';
+  
+  try {
+    chrome.storage.local.get(["currentProblem", "platform"], async ({ currentProblem, platform }) => {
+      if (currentProblem && platform) {
+        await streamSimilarProblems(currentProblem, platform);
+      }
+    });
+  } catch (error) {
+    console.error("Error loading similar problems:", error);
+    similarProblemsContainer.innerHTML = '<div style="color: #f44336; padding: 20px;">Error loading similar problems. Please try again.</div>';
+  }
+});
+
+analyzeCodeBtn.addEventListener("click", () => {
+  // Placeholder for future implementation
+  alert("Analyze Code & Complexity feature will be implemented soon!");
+});
+
+// Back button event listeners
+backFromHintsBtn.addEventListener("click", () => {
+  showView('menu');
+});
+
+backFromSimilarBtn.addEventListener("click", () => {
+  showView('menu');
+});
+
+// Next hint button event listener
+nextHintBtn.addEventListener("click", () => {
+  if (isStreaming) {
+    return; // Don't allow navigation while streaming
+  }
+  
+  if (currentHintIndex < hintList.length - 1) {
+    currentHintIndex++;
+    hintContent.innerHTML = hintList[currentHintIndex];
+    updateHintCounter();
+  } else {
+    hintContent.innerHTML = '<div style="color: #ff9800; text-align: center;">No more hints available!</div>';
+    nextHintBtn.disabled = true;
+    nextHintBtn.style.opacity = '0.5';
+  }
+});
+
+// Function to update hint counter
+function updateHintCounter() {
+  const hintCounter = document.getElementById("hintCounter");
+  if (hintCounter) {
+    hintCounter.textContent = `${currentHintIndex + 1} / ${hintList.length}`;
+  }
+}
 
 // Streaming function for hints
 async function streamHints(problem, platform) {
   return new Promise((resolve, reject) => {
     isStreaming = true;
-    hintElement.innerHTML = '<span style="color: #666;">🔄 Generating hints...</span>';
+    hintContent.innerHTML = '<div style="text-align: center; color: #666;">🔄 Generating hints...</div>';
     
     // Disable next hint button during streaming
     nextHintBtn.disabled = true;
     nextHintBtn.style.opacity = '0.5';
     
     const hints = {}; // Store hints by number
-    let displayedHintNumber = 1;
     
     fetch("http://localhost:3000/generate-hint-stream", {
       method: "POST",
@@ -122,9 +220,10 @@ async function streamHints(problem, platform) {
             // Display first hint if available
             currentHintIndex = 0;
             if (hintList.length > 0) {
-              hintElement.innerHTML = hintList[0];
+              hintContent.innerHTML = hintList[0];
+              updateHintCounter();
             } else {
-              hintElement.innerHTML = "No hints received.";
+              hintContent.innerHTML = '<div style="color: #f44336;">No hints received.</div>';
             }
             
             // Re-enable next hint button
@@ -145,32 +244,22 @@ async function streamHints(problem, platform) {
                 const data = JSON.parse(line.slice(6));
                 
                 switch (data.type) {
-                  case 'raw_token':
-                    // Raw streaming token - could be used for debug
-                    break;
-                    
                   case 'hint_update':
-                    // Store/update hint
                     hints[data.number] = data.hint;
                     
                     // If this is the first hint, show it streaming
                     if (data.number === 1) {
-                      hintElement.innerHTML = `<span style="color: #1976d2;">💡 Hint 1: </span>${data.hint}`;
+                      hintContent.innerHTML = `<div style="color: #1976d2;">💡 Hint 1: </div><div style="margin-top: 8px;">${data.hint}</div>`;
                     }
                     break;
                     
                   case 'hint_final':
-                    // Final version of hint
                     hints[data.number] = data.hint;
                     
                     // Update display if it's the currently shown hint
                     if (data.number === 1) {
-                      hintElement.innerHTML = data.hint;
+                      hintContent.innerHTML = `<div>${data.hint}</div>`;
                     }
-                    break;
-                    
-                  case 'done':
-                    // Stream completed
                     break;
                     
                   case 'error':
@@ -190,7 +279,7 @@ async function streamHints(problem, platform) {
     })
     .catch(error => {
       console.error('Streaming error:', error);
-      hintElement.innerText = "Error generating hints.";
+      hintContent.innerHTML = '<div style="color: #f44336;">Error generating hints. Please try again.</div>';
       nextHintBtn.disabled = false;
       nextHintBtn.style.opacity = '1';
       isStreaming = false;
@@ -202,7 +291,7 @@ async function streamHints(problem, platform) {
 // Streaming function for similar problems
 async function streamSimilarProblems(problem, platform) {
   return new Promise((resolve, reject) => {
-    similarList.innerHTML = '<li style="color: #666;">🔄 Finding similar problems...</li>';
+    similarProblemsContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">🔄 Finding similar problems...</div>';
     
     const problems = {}; // Store problems by number
     
@@ -227,19 +316,20 @@ async function streamSimilarProblems(problem, platform) {
             // Finalize similar problems display
             const problemNumbers = Object.keys(problems).sort((a, b) => parseInt(a) - parseInt(b));
             
-            similarList.innerHTML = "";
+            similarProblemsContainer.innerHTML = "";
             if (problemNumbers.length > 0) {
               problemNumbers.forEach(number => {
                 const problemText = problems[number];
                 if (problemText && problemText.trim()) {
-                  const li = document.createElement("li");
-                  li.style.cssText = `
-                    margin-bottom: 8px;
-                    padding: 8px;
+                  const problemCard = document.createElement("div");
+                  problemCard.style.cssText = `
+                    margin-bottom: 12px;
+                    padding: 16px;
                     border: 1px solid #e0e0e0;
-                    border-radius: 4px;
+                    border-radius: 8px;
                     background-color: #f9f9f9;
-                    transition: background-color 0.2s ease;
+                    transition: all 0.2s ease;
+                    cursor: pointer;
                   `;
                   
                   // Create clickable link
@@ -252,7 +342,7 @@ async function streamSimilarProblems(problem, platform) {
                     text-decoration: none;
                     font-weight: 500;
                     display: block;
-                    padding: 4px 0;
+                    line-height: 1.4;
                   `;
                   link.textContent = problemText.trim();
                   
@@ -261,27 +351,31 @@ async function streamSimilarProblems(problem, platform) {
                     e.preventDefault();
                     if (leetcodeUrl) {
                       chrome.tabs.create({ url: leetcodeUrl });
-                      window.close(); // Close popup after opening link
+                      window.close();
                     }
                   });
                   
                   // Add hover effect
-                  link.addEventListener("mouseenter", () => {
+                  problemCard.addEventListener("mouseenter", () => {
+                    problemCard.style.backgroundColor = "#f0f0f0";
+                    problemCard.style.transform = "translateY(-2px)";
+                    problemCard.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
                     link.style.textDecoration = "underline";
-                    li.style.backgroundColor = "#f0f0f0";
                   });
                   
-                  link.addEventListener("mouseleave", () => {
+                  problemCard.addEventListener("mouseleave", () => {
+                    problemCard.style.backgroundColor = "#f9f9f9";
+                    problemCard.style.transform = "translateY(0)";
+                    problemCard.style.boxShadow = "none";
                     link.style.textDecoration = "none";
-                    li.style.backgroundColor = "#f9f9f9";
                   });
                   
-                  li.appendChild(link);
-                  similarList.appendChild(li);
+                  problemCard.appendChild(link);
+                  similarProblemsContainer.appendChild(problemCard);
                 }
               });
             } else {
-              similarList.innerHTML = "<li>No similar problems found.</li>";
+              similarProblemsContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No similar problems found.</div>';
             }
             
             resolve();
@@ -301,24 +395,24 @@ async function streamSimilarProblems(problem, platform) {
                     problems[data.number] = '';
                     
                     // Add a placeholder for the streaming problem
-                    const li = document.createElement("li");
-                    li.id = `problem-${data.number}`;
-                    li.style.cssText = `
-                      margin-bottom: 8px;
-                      padding: 8px;
+                    const placeholder = document.createElement("div");
+                    placeholder.id = `problem-${data.number}`;
+                    placeholder.style.cssText = `
+                      margin-bottom: 12px;
+                      padding: 16px;
                       border: 1px solid #e0e0e0;
-                      border-radius: 4px;
+                      border-radius: 8px;
                       background-color: #f9f9f9;
-                      min-height: 40px;
+                      min-height: 50px;
                     `;
-                    li.innerHTML = '<span style="color: #1976d2;">📝 </span><span class="streaming-problem">Loading problem...</span>';
+                    placeholder.innerHTML = '<div style="color: #1976d2;">📝 <span class="streaming-problem">Loading problem...</span></div>';
                     
                     // Clear loading message on first problem
                     if (data.number === 1) {
-                      similarList.innerHTML = '';
+                      similarProblemsContainer.innerHTML = '';
                     }
                     
-                    similarList.appendChild(li);
+                    similarProblemsContainer.appendChild(placeholder);
                     break;
                     
                   case 'problem_token':
@@ -348,7 +442,7 @@ async function streamSimilarProblems(problem, platform) {
                         text-decoration: none;
                         font-weight: 500;
                         display: block;
-                        padding: 4px 0;
+                        line-height: 1.4;
                       `;
                       link.textContent = problemText;
                       
@@ -357,28 +451,29 @@ async function streamSimilarProblems(problem, platform) {
                         e.preventDefault();
                         if (leetcodeUrl) {
                           chrome.tabs.create({ url: leetcodeUrl });
-                          window.close(); // Close popup after opening link
+                          window.close();
                         }
                       });
                       
                       // Add hover effect
-                      link.addEventListener("mouseenter", () => {
-                        link.style.textDecoration = "underline";
+                      completedElement.addEventListener("mouseenter", () => {
                         completedElement.style.backgroundColor = "#f0f0f0";
+                        completedElement.style.transform = "translateY(-2px)";
+                        completedElement.style.boxShadow = "0 4px 8px rgba(0,0,0,0.1)";
+                        link.style.textDecoration = "underline";
                       });
                       
-                      link.addEventListener("mouseleave", () => {
-                        link.style.textDecoration = "none";
+                      completedElement.addEventListener("mouseleave", () => {
                         completedElement.style.backgroundColor = "#f9f9f9";
+                        completedElement.style.transform = "translateY(0)";
+                        completedElement.style.boxShadow = "none";
+                        link.style.textDecoration = "none";
                       });
                       
                       completedElement.innerHTML = '';
                       completedElement.appendChild(link);
+                      completedElement.style.cursor = 'pointer';
                     }
-                    break;
-                    
-                  case 'done':
-                    // All problems completed
                     break;
                     
                   case 'error':
@@ -398,22 +493,11 @@ async function streamSimilarProblems(problem, platform) {
     })
     .catch(error => {
       console.error('Streaming error:', error);
-      similarList.innerHTML = "<li>Error loading similar problems.</li>";
+      similarProblemsContainer.innerHTML = '<div style="color: #f44336; padding: 20px;">Error loading similar problems. Please try again.</div>';
       reject(error);
     });
   });
 }
 
-// Handle next hint button
-nextHintBtn.addEventListener("click", () => {
-  if (isStreaming) {
-    return; // Don't allow navigation while streaming
-  }
-  
-  if (currentHintIndex < hintList.length - 1) {
-    currentHintIndex++;
-    hintElement.innerHTML = hintList[currentHintIndex];
-  } else {
-    hintElement.innerHTML = "No more hints available!";
-  }
-});
+// Initialize the view
+showView('menu');
