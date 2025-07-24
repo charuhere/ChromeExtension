@@ -2,286 +2,54 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CodeHint Assistant</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            width: 380px;
-            min-height: 500px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 20px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .header h1 {
-            color: white;
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-
-        .problem-title {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 16px;
-            font-weight: 500;
-            line-height: 1.4;
-        }
-
-        .container {
-            padding: 20px;
-            background: white;
-            min-height: 400px;
-        }
-
-        /* Menu View Styles */
-        .menu-view {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            padding: 20px 0;
-        }
-
-        .menu-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            color: white;
-            padding: 18px 20px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .menu-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        .menu-button:active {
-            transform: translateY(0);
-        }
-
-        .menu-button::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        .menu-button:hover::before {
-            left: 100%;
-        }
-
-        .menu-button .icon {
-            margin-right: 10px;
-            font-size: 18px;
-        }
-
-        /* Hints View Styles */
-        .hints-view {
-            display: none;
-        }
-
-        .hints-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .hints-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .hint-counter {
-            background: #667eea;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .hint-content {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            min-height: 120px;
-            line-height: 1.6;
-            border-left: 4px solid #667eea;
-        }
-
-        .hint-navigation {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-        }
-
-        .btn {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #5a67d8;
-        }
-
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #4a5568;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Similar Problems View Styles */
-        .similar-view {
-            display: none;
-        }
-
-        .similar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .similar-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .similar-problems-container {
-            min-height: 200px;
-        }
-
-        .back-button {
-            background: #e2e8f0;
-            color: #4a5568;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-
-        .back-button:hover {
-            background: #cbd5e0;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 400px) {
-            body {
-                width: 320px;
-            }
-            
-            .container {
-                padding: 16px;
-            }
-            
-            .menu-button {
-                padding: 16px 18px;
-                font-size: 15px;
-            }
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; width: 380px; margin: 0; color: #333; }
+        .header { padding: 15px; text-align: center; background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+        .problem-title { font-size: 16px; font-weight: 600; }
+        .container { padding: 15px; }
+        .view { display: none; }
+        #menuView { display: block; }
+        button { display: block; width: 100%; padding: 12px; margin-top: 10px; font-size: 16px; cursor: pointer; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; text-align: left; font-weight: 500; transition: background-color 0.2s, transform 0.1s; }
+        button:hover { background-color: #f8fafc; }
+        button:active { transform: scale(0.99); }
+        button:disabled { cursor: not-allowed; opacity: 0.6; }
+        .content-box { min-height: 150px; padding: 15px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px; margin-bottom: 10px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.6; }
+        .footer { display: flex; justify-content: space-between; margin-top: 10px; }
+        .back-button { width: auto; padding: 8px 16px; }
+        a { color: #3b82f6; text-decoration: none; }
+        a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
+
     <div class="header">
-        <h1>CodeHint Assistant</h1>
-        <div id="problemTitle" class="problem-title">Loading...</div>
+        <div id="problemTitle" class="problem-title">Detecting Problem...</div>
     </div>
 
     <div class="container">
-        <!-- Menu View -->
-        <div id="menuView" class="menu-view">
-            <button id="getHintsBtn" class="menu-button">
-                <span class="icon">💡</span>
-                Get Hints
-            </button>
-            <button id="viewSimilarBtn" class="menu-button">
-                <span class="icon">🔍</span>
-                View Similar Problems
-            </button>
-            <button id="analyzeCodeBtn" class="menu-button">
-                <span class="icon">📊</span>
-                Analyze Code & Complexity
-            </button>
+        <div id="menuView" class="view">
+            <button id="getHintsBtn">💡 Get Hints</button>
+            <button id="viewSimilarBtn">🔍 View Similar Problems</button>
+            <button id="analyzeCodeBtn">📊 Analyze Code & Complexity</button>
         </div>
 
-        <!-- Hints View -->
-        <div id="hintsView" class="hints-view">
-            <div class="hints-header">
-                <h2 class="hints-title">Hints</h2>
-                <span id="hintCounter" class="hint-counter">1 / 3</span>
-            </div>
-            
-            <div id="hintContent" class="hint-content">
-                Loading hints...
-            </div>
-            
-            <div class="hint-navigation">
-                <button id="backFromHintsBtn" class="btn btn-secondary">← Back</button>
-                <button id="nextHintBtn" class="btn btn-primary">Next Hint →</button>
+        <div id="hintsView" class="view">
+            <div id="hintContent" class="content-box"></div>
+            <div class="footer">
+                <button id="backFromHintsBtn" class="back-button">← Back</button>
+                <button id="nextHintBtn" style="width: auto; padding: 8px 16px;">Next Hint →</button>
             </div>
         </div>
 
-        <!-- Similar Problems View -->
-        <div id="similarView" class="similar-view">
-            <div class="similar-header">
-                <h2 class="similar-title">Similar Problems</h2>
-                <button id="backFromSimilarBtn" class="back-button">← Back</button>
-            </div>
-            
-            <div id="similarProblemsContainer" class="similar-problems-container">
-                Loading similar problems...
-            </div>
+        <div id="similarView" class="view">
+            <div id="similarProblemsContainer" class="content-box"></div>
+            <button id="backFromSimilarBtn" class="back-button">← Back</button>
+        </div>
+
+        <div id="analysisView" class="view">
+            <div id="analysisContent" class="content-box"></div>
+            <button id="backFromAnalysisBtn" class="back-button">← Back</button>
         </div>
     </div>
 

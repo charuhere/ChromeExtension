@@ -1,24 +1,26 @@
 {
   "manifest_version": 3,
   "name": "CodeHint Assistant",
-  "version": "1.0",
-  "description": "Provides hints and similar problems for LeetCode and HackerRank.",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "version": "1.2",
+  "description": "Analyzes LeetCode problems and code.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
-    "https://leetcode.com/*",
-    "https://www.hackerrank.com/*"
+    "*://*.leetcode.com/problems/*"
   ],
   "action": {
-    "default_popup": "popup/popup.html",
-    "default_icon": "icons/icon.png"
+    "default_popup": "popup/popup.html"
   },
   "content_scripts": [
     {
       "matches": [
-        "https://leetcode.com/problems/*"
+        "*://*.leetcode.com/problems/*"
       ],
-      "js": ["content.js"]
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }
-
