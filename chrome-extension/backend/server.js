@@ -13,7 +13,7 @@ app.use(express.json());
 // =================================================================
 // === CRITICAL FIX: Load the API key from the .env file         ===
 // =================================================================
-const genAI = new GoogleGenerativeAI("AIzaSyBpbBi2BMQDBtOIiEwGZ_XgwlzXMBm16Xk");
+const genAI = new GoogleGenerativeAI("");
 
 // --- Helper function to set up streaming headers ---
 const setStreamHeaders = (res) => {
@@ -33,7 +33,19 @@ app.post('/generate-hint-stream', async (req, res) => {
   const { problem } = req.body;
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Give 3 concise hints for the LeetCode problem "${problem}". Each hint on a new line. No extra text.`;
+   const prompt = `
+You are an expert programming coach guiding a user through the LeetCode problem: "${problem}".
+
+Your task is to provide three progressively helpful hints. Each hint should build on the previous one, guiding the user toward the solution without giving it away completely.
+
+Provide the response in this exact format, with no extra text:
+
+**Hint 1:** (A high-level conceptual hint. Suggest the key data structure or overall algorithm to use, for example, "Consider using a hash map..." or "This problem can be solved efficiently with a two-pointer approach.")
+
+**Hint 2:** (A more detailed hint on the logic. Briefly describe how to use the item from Hint 1. For example, "As you iterate, what information should you store in the hash map to help with future elements?" or "How should your two pointers move based on their current sum?")
+
+**Hint 3:** (An implementation detail. Provide a single, critical line of pseudocode or a key code snippet that represents the core logic. For example, "map.get(target - current_number)" or "if (sum < target) left++;".)
+`;
     const result = await model.generateContentStream(prompt);
     for await (const chunk of result.stream) {
       res.write(`data: ${JSON.stringify({ hint: chunk.text() })}\n\n`);

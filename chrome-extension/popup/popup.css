@@ -1,67 +1,190 @@
+/* popup.css - Dark Theme (Blue & Red) */
+
+/* --- Color Palette & Variables --- */
+:root {
+    --background-dark: #1A1A1D; /* Primary dark background */
+    --background-card: #28282B; /* Slightly lighter for cards/buttons */
+    --text-primary: #F4F4F5;   /* Bright text for readability */
+    --text-secondary: #A9A9A9; /* Dimmer text for subtitles */
+    --accent-blue: #007BFF;     /* A vibrant blue for interaction */
+    --accent-red: #D0021B;       /* A sharp red for highlights */
+    --border-color: #404040;   /* Subtle border for separation */
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* --- General & Body Styling --- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  padding: 15px;
-  width: 300px;
-  background-color: #1a1a1a;  /* deep gray background */
-  color: #cf1919;             /* soft light text */
-  border-radius: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    width: 380px;
+    background-color: var(--background-dark);
+    color: var(--text-primary);
 }
 
-h2 {
-  font-size: 18px;
-  margin-bottom: 10px;
-  color: #ffffff;
-  border-bottom: 1px solid #333;
-  padding-bottom: 5px;
+/* --- Header Styling --- */
+.header {
+    padding: 20px;
+    text-align: center;
+    background-color: var(--background-card);
+    border-bottom: 1px solid var(--border-color);
 }
 
-#hint-section {
-  margin-top: 10px;
+.problem-title {
+    font-size: 17px;
+    font-weight: 600;
 }
 
-#hint {
-  font-size: 14px;
-  margin: 8px 0;
-  padding: 10px;
-  background-color: #2a2a2a;   /* slightly lighter background box */
-  border: 1px solid #3a3a3a;
-  border-radius: 6px;
-  color: #f5f5f5;
-  line-height: 1.5;
+.problem-title a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+.problem-title a:hover {
+    text-decoration: underline;
 }
 
-#nextHint {
-  padding: 8px 14px;
-  background-color: #4f46e5;   /* indigo button */
-  border: none;
-  border-radius: 6px;
-  color: #ffffff;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
+/* --- Main Container & Views --- */
+.container {
+    padding: 15px;
 }
 
-#nextHint:hover {
-  background-color: #4338ca;   /* darker indigo on hover */
+.view {
+    display: none;
+    animation: fadeIn 0.3s ease-in-out;
 }
 
-#recommendations {
-  margin-top: 20px;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-#recommendations p {
-  font-weight: 500;
-  margin-bottom: 6px;
-  color: #cccccc;
+#menuView {
+    display: block;
 }
 
-#recommendations ul {
-  list-style-type: disc;
-  padding-left: 20px;
-  font-size: 14px;
-  color: #b0b0b0;
+/* --- Button Styling --- */
+button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px;
+    margin-top: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--background-card);
+    color: var(--text-primary);
+    text-align: left;
+    transition: all 0.2s ease;
 }
 
-.total {
-  display: none;
+button:first-child {
+    margin-top: 0;
+}
+
+button:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+button:active {
+    transform: scale(0.99);
+    border-color: var(--accent-red);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* --- Content & Footer Styling --- */
+.content-box {
+    min-height: 200px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    background: var(--background-dark);
+    border-radius: 8px;
+    margin-bottom: 15px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.6;
+}
+
+.content-box i { /* For "Loading..." text */
+    color: var(--text-secondary);
+}
+
+.footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.back-button, #nextHintBtn {
+    width: auto;
+    padding: 8px 18px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.back-button {
+    background-color: var(--background-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+.back-button:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+#nextHintBtn {
+    background-color: var(--accent-blue);
+    border: 1px solid var(--accent-blue);
+    color: var(--text-primary);
+}
+#nextHintBtn:hover {
+    opacity: 0.9;
+}
+
+/* --- Analysis View Specifics --- */
+#analysisContent strong {
+    color: var(--text-secondary);
+}
+
+#time-complexity, #space-complexity {
+    color: var(--accent-blue);
+    font-weight: bold;
+}
+
+/* --- Similar Problems Links --- */
+#similarProblemsContainer {
+    background-color: var(--background-dark);
+    padding: 0;
+    border: none;
+}
+#similarProblemsContainer a {
+    display: block;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--text-primary);
+    background-color: var(--background-card);
+    border: 1px solid var(--border-color);
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+#similarProblemsContainer a:hover {
+    border-left: 3px solid var(--accent-red);
+    color: var(--accent-blue);
 }
