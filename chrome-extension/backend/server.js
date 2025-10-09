@@ -13,7 +13,8 @@ app.use(express.json());
 // =================================================================
 // === CRITICAL FIX: Load the API key from the .env file         ===
 // =================================================================
-const genAI = new GoogleGenerativeAI("");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+console.log('Using GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Loaded' : 'Not Loaded');
 
 // --- Helper function to set up streaming headers ---
 const setStreamHeaders = (res) => {
@@ -32,7 +33,7 @@ app.post('/generate-hint-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem } = req.body;
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
    const prompt = `
 You are an expert programming coach guiding a user through the LeetCode problem: "${problem}".
 
@@ -85,7 +86,7 @@ app.post('/similar-problems-stream', async (req, res) => {
 });
 
 
-// =================================================================
+// =========================f========================================
 // === Endpoint for Code Analysis (Already Present)              ===
 // =================================================================
 // Replace the existing '/analyze-code-stream' function in your server.js
@@ -151,3 +152,5 @@ app.post('/analyze-code-stream', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
 });
+
+

@@ -1,5 +1,3 @@
-// content.js (Final Version)
-
 /**
  * Extracts the problem title from the current LeetCode URL.
  */
@@ -18,13 +16,8 @@ function extractLeetCodeProblemTitle(url) {
 function getEditorCode() {
   const editor = document.querySelector('.monaco-editor');
   if (!editor) return null;
-
-  let codeLines = editor.querySelectorAll('.view-lines > .view-line');
-  if (codeLines.length === 0) {
-    // Fallback selector if the primary one fails
-    codeLines = editor.querySelectorAll('.view-line');
-  }
-  return Array.from(codeLines).map(line => line.textContent).join('\n');
+  let codeLines = editor.querySelectorAll('.view-line');
+  return codeLines.map(line => line.textContent).join('\n');
 }
 
 /**
