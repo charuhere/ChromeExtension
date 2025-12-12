@@ -1,226 +1,360 @@
-// Waits for the HTML to be ready before running
-document.addEventListener('DOMContentLoaded', () => {
+// =================================================================
+// === CONFIGURATION                                             ===
+// =================================================================
+const API_BASE = 'http://localhost:3000';
+const ENDPOINTS = {
+  hints: '/generate-hint-stream',
+  similar: '/similar-problems-stream',
+  analysis: '/analyze-code-stream'
+};
 
-    // --- State Variables ---
-    let hintList = [];
-    let currentHintIndex = 0;
+// =================================================================
+// === STATE MANAGEMENT                                          ===
+// =================================================================
+const state = {
+  hints: [],
+  currentHintIndex: 0,
+  hintsCache: {} // Store hints by problem name
+};
 
-    // --- DOM Elements ---
-    const problemTitleEl = document.getElementById('problemTitle');
-    const allViews = {
-        menu: document.getElementById('menuView'),
-        hints: document.getElementById('hintsView'),
-        similar: document.getElementById('similarView'),
-        analysis: document.getElementById('analysisView')
-    };
-    const menuButtons = {
-        getHints: document.getElementById('getHintsBtn'),
-        viewSimilar: document.getElementById('viewSimilarBtn'),
-        analyzeCode: document.getElementById('analyzeCodeBtn')
-    };
-    const hintsElements = {
-        content: document.getElementById('hintContent'),
-        next: document.getElementById('nextHintBtn'),
-        back: document.getElementById('backFromHintsBtn')
-    };
-    const similarElements = {
-        container: document.getElementById('similarProblemsContainer'),
-        back: document.getElementById('backFromSimilarBtn')
-    };
-    const analysisElements = {
-        content: document.getElementById('analysisContent'),
-        back: document.getElementById('backFromAnalysisBtn')
-    };
+// =================================================================
+// === DOM ELEMENTS (Cached for performance)                     ===
+// =================================================================
+const elements = {
+  problemTitle: document.getElementById('problemTitle'),
+  views: {
+    menu: document.getElementById('menuView'),
+    hints: document.getElementById('hintsView'),
+    similar: document.getElementById('similarView'),
+    analysis: document.getElementById('analysisView')
+  },
+  buttons: {
+    getHints: document.getElementById('getHintsBtn'),
+    viewSimilar: document.getElementById('viewSimilarBtn'),
+    analyzeCode: document.getElementById('analyzeCodeBtn')
+  },
+  hints: {
+    content: document.getElementById('hintContent'),
+    next: document.getElementById('nextHintBtn'),
+    back: document.getElementById('backFromHintsBtn')
+  },
+  similar: {
+    container: document.getElementById('similarProblemsContainer'),
+    back: document.getElementById('backFromSimilarBtn')
+  },
+  analysis: {
+    content: document.getElementById('analysisContent'),
+    back: document.getElementById('backFromAnalysisBtn')
+  }
+};
 
-    // --- Helper Function ---
-    function convertToLeetCodeUrl(problemTitle) {
-        if (!problemTitle) return null;
-        const slug = problemTitle.trim().toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
-        return `https://leetcode.com/problems/${slug}/`;
-    }
+// =================================================================
+// === UTILITY FUNCTIONS                                         ===
+// =================================================================
 
-    // --- View Management ---
-    const showView = (viewName) => {
-        Object.values(allViews).forEach(view => view.style.display = 'none');
-        if (allViews[viewName]) {
-            allViews[viewName].style.display = 'block';
-        }
-    };
+function convertToLeetCodeUrl(problemTitle) {
+  if (!problemTitle) return null;
+  const slug = problemTitle
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+  return `https://leetcode.com/problems/${slug}/`;
+}
 
-    // --- Initialization ---
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const onProblemPage = tabs[0] && tabs[0].url && tabs[0].url.includes("leetcode.com/problems/");
-        if (onProblemPage) {
-            chrome.storage.local.get("currentProblem", ({ currentProblem }) => {
-                problemTitleEl.textContent = currentProblem || "Problem Detected";
-                Object.values(menuButtons).forEach(btn => btn.disabled = false);
-            });
-        } else {
-            problemTitleEl.innerHTML = 'Not on a LeetCode problem page. <br><a href="#" id="goToLeetCode">Go to problems &rarr;</a>';
-            const goToLeetCodeLink = document.getElementById('goToLeetCode');
-            if (goToLeetCodeLink) {
-                goToLeetCodeLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    chrome.tabs.create({ url: "https://leetcode.com/problemset/" });
-                });
-            }
-            Object.values(menuButtons).forEach(btn => btn.disabled = true);
-        }
+function showView(viewName) {
+  Object.values(elements.views).forEach(view => view.style.display = 'none');
+  elements.views[viewName].style.display = 'block';
+}
+
+function setLoadingState(element, message) {
+  element.innerHTML = `<div class="loading"><div class="spinner"></div><i>${message}</i></div>`;
+}
+
+function setErrorState(element, message) {
+  element.innerHTML = `<div class="error">❌ ${message}</div>`;
+}
+
+// =================================================================
+// === GENERIC STREAMING FUNCTION (DRY - No repetition!)         ===
+// =================================================================
+
+async function streamFromAPI(endpoint, body, onData, onComplete, onError) {
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
 
-    // --- Event Listeners ---
-    menuButtons.getHints.addEventListener('click', handleGetHints);
-    menuButtons.viewSimilar.addEventListener('click', handleViewSimilar);
-    menuButtons.analyzeCode.addEventListener('click', handleAnalyzeCode);
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
 
-    hintsElements.back.addEventListener('click', () => showView('menu'));
-    hintsElements.next.addEventListener('click', showNextHint);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    similarElements.back.addEventListener('click', () => showView('menu'));
-    analysisElements.back.addEventListener('click', () => showView('menu'));
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
 
-    // --- Feature Handlers ---
-
-    function handleGetHints() {
-        showView('hints');
-        hintsElements.content.innerHTML = '<i>🔄 Generating hints...</i>';
-        hintsElements.next.style.display = 'none'; // Hide until hints are loaded
-        chrome.storage.local.get(["currentProblem", "platform"], ({ currentProblem, platform }) => {
-            if (currentProblem && platform) {
-                streamHints(currentProblem, platform);
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.substring(6));
+            if (data.type === 'error') {
+              onError(data.message);
+              return;
             }
-        });
-    }
-
-    function handleViewSimilar() {
-        showView('similar');
-        similarElements.container.innerHTML = '<i>🔄 Finding similar problems...</i>';
-        chrome.storage.local.get(["currentProblem", "platform"], ({ currentProblem, platform }) => {
-            if (currentProblem && platform) {
-                streamSimilarProblems(currentProblem, platform);
-            }
-        });
-    }
-
-    function handleAnalyzeCode() {
-        showView('analysis');
-        analysisElements.content.textContent = 'Getting code from editor...';
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            chrome.tabs.sendMessage(tabs[0].id, { type: "GET_USER_CODE" }, (response) => {
-                if (chrome.runtime.lastError || !response) {
-                    analysisElements.content.textContent = 'Error: Could not communicate with the page. Please refresh it.';
-                    return;
-                }
-                if (response.error) {
-                    analysisElements.content.textContent = response.error;
-                    return;
-                }
-                chrome.storage.local.get(["currentProblem", "platform"], ({ currentProblem, platform }) => {
-                    analysisElements.content.textContent = 'Analyzing...';
-                    streamCodeAnalysis(currentProblem, platform, response.code);
-                });
-            });
-        });
-    }
-
-    // --- Streaming and Logic Functions ---
-
-    function showNextHint() {
-        currentHintIndex++;
-        if (currentHintIndex < hintList.length) {
-            hintsElements.content.innerHTML = hintList[currentHintIndex];
+            onData(data);
+          } catch (e) {
+            console.error('Parse error:', e);
+          }
         }
-        if (currentHintIndex >= hintList.length - 1) {
-            hintsElements.next.style.display = 'none'; // Hide on last hint
-        }
+      }
     }
 
-    async function streamHints(problem, platform) {
-        hintList = [];
-        currentHintIndex = 0;
-        let fullResponse = "";
-        const response = await fetch("http://localhost:3000/generate-hint-stream", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ problem, platform }),
-        });
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        for await (const chunk of readStream(reader, decoder)) {
-            if (chunk.hint) { fullResponse += chunk.hint; }
-        }
-        // Assuming hints are separated by newlines
-        hintList = fullResponse.split('\n').map(h => h.replace(/^(Hint \d:|\*|\•)\s*/, '').trim()).filter(h => h);
-        if (hintList.length > 0) {
-            hintsElements.content.innerHTML = hintList[0];
-            hintsElements.next.style.display = hintList.length > 1 ? 'block' : 'none';
-        } else {
-            hintsElements.content.innerHTML = 'Could not generate hints.';
-        }
+    if (onComplete) onComplete();
+  } catch (error) {
+    console.error('Stream error:', error);
+    onError(error.message);
+  }
+}
+
+// =================================================================
+// === FEATURE 1: HINTS                                          ===
+// =================================================================
+
+async function handleGetHints() {
+  showView('hints');
+  
+  const { currentProblem } = await chrome.storage.local.get('currentProblem');
+  if (!currentProblem) {
+    setErrorState(elements.hints.content, 'No problem detected');
+    return;
+  }
+
+  // Check if hints already cached for this problem
+  if (state.hintsCache[currentProblem]) {
+    console.log('✅ Loading cached hints for:', currentProblem);
+    state.hints = state.hintsCache[currentProblem];
+    state.currentHintIndex = 0;
+    displayCurrentHint();
+    updateHintButtons();
+    return;
+  }
+
+  // Not cached - fetch from API
+  setLoadingState(elements.hints.content, '🔄 Generating hints...');
+  elements.hints.next.style.display = 'none';
+
+  let fullResponse = '';
+  
+  await streamFromAPI(
+    ENDPOINTS.hints,
+    { problem: currentProblem },
+    (data) => {
+      if (data.hint) fullResponse += data.hint;
+    },
+    () => {
+      // Parse hints from response
+      const hintMatches = fullResponse.match(/\*\*Hint \d:\*\*\s*([^\n*]+)/g);
+      
+      if (hintMatches && hintMatches.length > 0) {
+        state.hints = hintMatches.map(h => 
+          h.replace(/\*\*Hint \d:\*\*\s*/, '').trim()
+        );
+        
+        // Cache the hints for this problem
+        state.hintsCache[currentProblem] = state.hints;
+        console.log('💾 Cached hints for:', currentProblem);
+        
+        state.currentHintIndex = 0;
+        displayCurrentHint();
+        updateHintButtons();
+      } else {
+        elements.hints.content.innerHTML = fullResponse || 'No hints generated';
+      }
+    },
+    (error) => setErrorState(elements.hints.content, error)
+  );
+}
+
+function showNextHint() {
+  state.currentHintIndex++;
+  if (state.currentHintIndex < state.hints.length) {
+    displayCurrentHint();
+  }
+  updateHintButtons();
+}
+
+function showPreviousHint() {
+  if (state.currentHintIndex > 0) {
+    state.currentHintIndex--;
+    displayCurrentHint();
+    updateHintButtons();
+  }
+}
+
+function displayCurrentHint() {
+  elements.hints.content.innerHTML = 
+    `<strong>Hint ${state.currentHintIndex + 1}:</strong> ${state.hints[state.currentHintIndex]}`;
+}
+
+function updateHintButtons() {
+  // Show/hide Previous button
+  const prevBtn = document.getElementById('prevHintBtn');
+  if (prevBtn) {
+    prevBtn.style.display = state.currentHintIndex > 0 ? 'block' : 'none';
+  }
+  
+  // Show/hide Next button
+  elements.hints.next.style.display = 
+    state.currentHintIndex < state.hints.length - 1 ? 'block' : 'none';
+}
+
+// =================================================================
+// === FEATURE 2: SIMILAR PROBLEMS                               ===
+// =================================================================
+
+async function handleViewSimilar() {
+  showView('similar');
+  setLoadingState(elements.similar.container, '🔄 Finding similar problems...');
+
+  const { currentProblem } = await chrome.storage.local.get('currentProblem');
+  if (!currentProblem) {
+    setErrorState(elements.similar.container, 'No problem detected');
+    return;
+  }
+
+  elements.similar.container.innerHTML = '';
+  let problemCount = 0;
+
+  await streamFromAPI(
+    ENDPOINTS.similar,
+    { problem: currentProblem },
+    (data) => {
+      if (data.type === 'problem_complete') {
+        problemCount++;
+        const card = createProblemCard(data.problem);
+        elements.similar.container.appendChild(card);
+      }
+    },
+    () => {
+      if (problemCount === 0) {
+        elements.similar.container.innerHTML = '<i>No similar problems found</i>';
+      }
+    },
+    (error) => setErrorState(elements.similar.container, error)
+  );
+}
+
+function createProblemCard(problemTitle) {
+  const card = document.createElement('a');
+  card.href = convertToLeetCodeUrl(problemTitle);
+  card.target = '_blank';
+  card.className = 'problem-card';
+  card.textContent = problemTitle;
+  return card;
+}
+
+// =================================================================
+// === FEATURE 3: CODE ANALYSIS                                  ===
+// =================================================================
+
+async function handleAnalyzeCode() {
+  showView('analysis');
+  setLoadingState(elements.analysis.content, '⏳ Getting code from editor...');
+
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_USER_CODE' }, async (response) => {
+    if (chrome.runtime.lastError || !response) {
+      setErrorState(elements.analysis.content, 'Could not communicate with page. Try refreshing.');
+      return;
     }
 
-    async function streamSimilarProblems(problem, platform) {
-        similarElements.container.innerHTML = ''; // Clear previous results
-        const response = await fetch("http://localhost:3000/similar-problems-stream", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ problem, platform }),
-        });
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        for await (const chunk of readStream(reader, decoder)) {
-            if (chunk.type === 'problem_complete') {
-                const problemCard = document.createElement('a');
-                problemCard.href = convertToLeetCodeUrl(chunk.problem);
-                problemCard.textContent = chunk.problem;
-                problemCard.target = "_blank";
-                problemCard.style.cssText = "display: block; padding: 8px; border-radius: 4px; margin-bottom: 5px; text-decoration: none; color: #333; background-color: #fff;";
-                problemCard.onmouseover = () => { problemCard.style.backgroundColor = '#e2e8f0'; };
-                problemCard.onmouseout = () => { problemCard.style.backgroundColor = '#fff'; };
-                similarElements.container.appendChild(problemCard);
-            }
-        }
+    if (response.error) {
+      setErrorState(elements.analysis.content, response.error);
+      return;
     }
 
-    async function streamCodeAnalysis(problem, platform, code) {
-        analysisElements.content.innerHTML = `
-            <div style="margin-bottom: 5px;"><strong>Time:</strong> <span id="time-complexity">...</span></div>
-            <div style="margin-bottom: 10px;"><strong>Space:</strong> <span id="space-complexity">...</span></div><hr style="border: none; border-top: 1px solid #eee; margin: 10px 0;">
-            <div><strong>Explanation:</strong></div>
-            <div id="explanation-text"></div>`;
-        const timeEl = document.getElementById('time-complexity');
-        const spaceEl = document.getElementById('space-complexity');
-        const explanationEl = document.getElementById('explanation-text');
-        try {
-            const response = await fetch("http://localhost:3000/analyze-code-stream", {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ problem, platform, code }),
-            });
-            if (!response.ok) throw new Error(`Server responded: ${response.status}`);
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            for await (const chunk of readStream(reader, decoder)) {
-                if (chunk.type === 'analysis_complete') {
-                    timeEl.textContent = chunk.time;
-                    spaceEl.textContent = chunk.space;
-                    explanationEl.textContent = chunk.explanation;
-                }
-            }
-        } catch (error) {
-            analysisElements.content.textContent = `Analysis failed: ${error.message}. Is your server running?`;
-        }
-    }
+    const { currentProblem } = await chrome.storage.local.get('currentProblem');
+    
+    elements.analysis.content.innerHTML = `
+      <div class="analysis-result">
+        <div class="complexity-row">
+          <strong>Time:</strong> <span id="time-complexity" class="loading-dots">...</span>
+        </div>
+        <div class="complexity-row">
+          <strong>Space:</strong> <span id="space-complexity" class="loading-dots">...</span>
+        </div>
+        <hr>
+        <div class="explanation-section">
+          <strong>Explanation:</strong>
+          <div id="explanation-text" class="loading-dots">Analyzing...</div>
+        </div>
+      </div>
+    `;
 
-    async function* readStream(reader, decoder) {
-        let buffer = "";
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (line.startsWith('data: ')) yield JSON.parse(line.substring(6));
-            }
+    await streamFromAPI(
+      ENDPOINTS.analysis,
+      { problem: currentProblem, code: response.code },
+      (data) => {
+        if (data.type === 'analysis_complete') {
+          document.getElementById('time-complexity').textContent = data.time;
+          document.getElementById('space-complexity').textContent = data.space;
+          document.getElementById('explanation-text').textContent = data.explanation;
         }
-    }
+      },
+      null,
+      (error) => setErrorState(elements.analysis.content, error)
+    );
+  });
+}
+
+// =================================================================
+// === INITIALIZATION                                            ===
+// =================================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const onProblemPage = tabs[0]?.url?.includes('leetcode.com/problems/');
+
+  if (onProblemPage) {
+    const { currentProblem } = await chrome.storage.local.get('currentProblem');
+    elements.problemTitle.textContent = currentProblem || 'Problem Detected';
+    Object.values(elements.buttons).forEach(btn => btn.disabled = false);
+  } else {
+    elements.problemTitle.innerHTML = 
+      'Not on a LeetCode problem page. <br><a href="#" id="goToLeetCode">Go to problems →</a>';
+    
+    document.getElementById('goToLeetCode')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://leetcode.com/problemset/' });
+    });
+    
+    Object.values(elements.buttons).forEach(btn => btn.disabled = true);
+  }
+
+  // Event listeners
+  elements.buttons.getHints.addEventListener('click', handleGetHints);
+  elements.buttons.viewSimilar.addEventListener('click', handleViewSimilar);
+  elements.buttons.analyzeCode.addEventListener('click', handleAnalyzeCode);
+
+  elements.hints.back.addEventListener('click', () => showView('menu'));
+  elements.hints.next.addEventListener('click', showNextHint);
+  
+  // Add Previous hint button listener
+  const prevBtn = document.getElementById('prevHintBtn');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', showPreviousHint);
+  }
+  elements.similar.back.addEventListener('click', () => showView('menu'));
+  elements.analysis.back.addEventListener('click', () => showView('menu'));
 });
