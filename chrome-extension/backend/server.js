@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
-dotenv.config(); // Loads your .env file
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,147 +10,213 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// =================================================================
-// === CRITICAL FIX: Load the API key from the .env file         ===
-// =================================================================
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-console.log('Using GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Loaded' : 'Not Loaded');
+// Initialize Groq client
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
 
-// --- Helper function to set up streaming headers ---
+console.log('Using GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'Loaded ✅' : 'Not Loaded ❌');
+
+// =================================================================
+// === HELPER FUNCTIONS (DRY - Don't Repeat Yourself)           ===
+// =================================================================
+
 const setStreamHeaders = (res) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-  });
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
 };
 
+const sendStreamData = (res, data) => {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+const handleStreamError = (res, error, context) => {
+  console.error(`${context} error:`, error.message);
+  const message = error.status === 429 
+    ? 'Rate limit exceeded. Please try again in a moment.'
+    : `Failed to process request: ${error.message}`;
+  sendStreamData(res, { type: 'error', message });
+  res.end();
+};
+
+async function streamGroqResponse(model, messages, onChunk) {
+  const stream = await groq.chat.completions.create({
+    model: model,
+    messages: messages,
+    stream: true,
+    temperature: 0.7,
+    max_tokens: 2000
+  });
+
+  let fullResponse = '';
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || '';
+    if (content) {
+      fullResponse += content;
+      if (onChunk) onChunk(content);
+    }
+  }
+  return fullResponse;
+}
+
 // =================================================================
-// === ADDED: Endpoint for Hints                                 ===
+// === ENDPOINT 1: Generate Hints                                ===
 // =================================================================
 app.post('/generate-hint-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem } = req.body;
+
+  if (!problem) {
+    sendStreamData(res, { type: 'error', message: 'Problem name is required' });
+    return res.end();
+  }
+
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-   const prompt = `
-You are an expert programming coach guiding a user through the LeetCode problem: "${problem}".
+    const prompt = `You are an expert programming coach for the LeetCode problem: "${problem}".
 
-Your task is to provide three progressively helpful hints. Each hint should build on the previous one, guiding the user toward the solution without giving it away completely.
+Provide THREE progressively helpful hints in this EXACT format:
 
-Provide the response in this exact format, with no extra text:
+**Hint 1:** [High-level conceptual hint - suggest key data structure or algorithm]
 
-**Hint 1:** (A high-level conceptual hint. Suggest the key data structure or overall algorithm to use, for example, "Consider using a hash map..." or "This problem can be solved efficiently with a two-pointer approach.")
+**Hint 2:** [More detailed logic hint - explain how to use the approach from Hint 1]
 
-**Hint 2:** (A more detailed hint on the logic. Briefly describe how to use the item from Hint 1. For example, "As you iterate, what information should you store in the hash map to help with future elements?" or "How should your two pointers move based on their current sum?")
+**Hint 3:** [Implementation detail - provide critical pseudocode or code snippet]
 
-**Hint 3:** (An implementation detail. Provide a single, critical line of pseudocode or a key code snippet that represents the core logic. For example, "map.get(target - current_number)" or "if (sum < target) left++;".)
-`;
-    const result = await model.generateContentStream(prompt);
-    for await (const chunk of result.stream) {
-      res.write(`data: ${JSON.stringify({ hint: chunk.text() })}\n\n`);
-    }
+Keep each hint concise (1-2 sentences). No extra text.`;
+
+    const fullResponse = await streamGroqResponse(
+      'llama-3.3-70b-versatile',
+      [{ role: 'user', content: prompt }],
+      (content) => sendStreamData(res, { hint: content })
+    );
+
     res.end();
   } catch (error) {
-    console.error('Hint streaming error:', error);
-    res.end();
+    handleStreamError(res, error, 'Hint generation');
   }
 });
 
 // =================================================================
-// === ADDED: Endpoint for Similar Problems                      ===
+// === ENDPOINT 2: Similar Problems                              ===
 // =================================================================
 app.post('/similar-problems-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem } = req.body;
+
+  if (!problem) {
+    sendStreamData(res, { type: 'error', message: 'Problem name is required' });
+    return res.end();
+  }
+
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `List 3 similar problems to "${problem}". Just the problem titles, each on a new line.`;
-    const result = await model.generateContentStream(prompt);
-    // In a real app, you might parse this more carefully.
-    // For now, we send the completed problems.
-    let fullResponse = "";
-    for await (const chunk of result.stream) {
-      fullResponse += chunk.text();
+    const prompt = `List exactly 3 LeetCode problems similar to "${problem}".
+Return ONLY the problem titles, one per line.
+No numbers, bullets, or extra text.
+
+Example format:
+Three Sum
+Two Sum II
+Four Sum`;
+
+    const fullResponse = await streamGroqResponse(
+      'llama-3.3-70b-versatile',
+      [{ role: 'user', content: prompt }],
+      null
+    );
+
+    // Parse and send problems
+    const problems = fullResponse
+      .split('\n')
+      .map(p => p.replace(/^[\d+.\-\*•]\s*/, '').trim())
+      .filter(p => p && p.length > 3)
+      .slice(0, 3);
+
+    if (problems.length === 0) {
+      sendStreamData(res, { type: 'error', message: 'Could not find similar problems' });
+    } else {
+      problems.forEach(problem => {
+        sendStreamData(res, { type: 'problem_complete', problem });
+      });
     }
-    const problems = fullResponse.split('\n').filter(p => p.trim());
-    for (const p of problems) {
-       res.write(`data: ${JSON.stringify({ type: 'problem_complete', problem: p })}\n\n`);
-    }
+
     res.end();
   } catch (error) {
-    console.error('Similar problems streaming error:', error);
-    res.end();
+    handleStreamError(res, error, 'Similar problems');
   }
 });
 
-
-// =========================f========================================
-// === Endpoint for Code Analysis (Already Present)              ===
 // =================================================================
-// Replace the existing '/analyze-code-stream' function in your server.js
-
+// === ENDPOINT 3: Code Analysis                                 ===
+// =================================================================
 app.post('/analyze-code-stream', async (req, res) => {
   setStreamHeaders(res);
-  const { problem, platform, code } = req.body;
-  if (!problem || !platform || !code) return res.status(400).end();
+  const { problem, code } = req.body;
+
+  if (!problem || !code) {
+    sendStreamData(res, { type: 'error', message: 'Problem name and code are required' });
+    return res.end();
+  }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `Analyze this code for the LeetCode problem "${problem}".
 
-    // =================================================================
-    // === THE FIX IS HERE: The user's 'code' is now in the prompt ===
-    // =================================================================
-    const prompt = `
-      You are an expert programming assistant. Your task is to analyze the user's provided code for the LeetCode problem: "${problem}".
-      Do NOT provide a general approach or write a new solution.
-      Analyze the specific code below for its logic, correctness, and complexity.
+**Code:**
+\`\`\`
+${code}
+\`\`\`
 
-      **Provided Code:**
-      \`\`\`
-      ${code}
-      \`\`\`
+Provide analysis in this EXACT format:
 
-      **Your Analysis (in this exact format):**
-      **TIME_COMPLEXITY:** O(value)
-      **SPACE_COMPLEXITY:** O(value)
-      **EXPLANATION:**
-      A 2-3 sentence explanation of the provided code's logic. Mention any potential bugs or major improvements.
-    `;
+**TIME_COMPLEXITY:** O(?)
+**SPACE_COMPLEXITY:** O(?)
+**EXPLANATION:**
+[2-3 sentences explaining the logic, potential bugs, and improvements]
 
-    const result = await model.generateContentStream(prompt);
-    
-    let fullResponse = "";
-    for await (const chunk of result.stream) {
-      fullResponse += chunk.text();
-    }
-    
-    const timeMatch = fullResponse.match(/TIME_COMPLEXITY:\s*(.*)/);
-    const spaceMatch = fullResponse.match(/SPACE_COMPLEXITY:\s*(.*)/);
-    const explanationMatch = fullResponse.match(/EXPLANATION:\s*([\s\S]*)/);
+Be specific about what the code does and any issues.`;
+
+    const fullResponse = await streamGroqResponse(
+      'llama-3.3-70b-versatile',
+      [{ role: 'user', content: prompt }],
+      null
+    );
+
+    // Parse the response
+    const timeMatch = fullResponse.match(/TIME_COMPLEXITY:\s*\*?\*?\s*(O\([^)]+\))/i);
+    const spaceMatch = fullResponse.match(/SPACE_COMPLEXITY:\s*\*?\*?\s*(O\([^)]+\))/i);
+    const explanationMatch = fullResponse.match(/EXPLANATION:\s*\*?\*?\s*([\s\S]*?)(?=\n\n|$)/i);
 
     if (timeMatch && spaceMatch && explanationMatch) {
-      res.write(`data: ${JSON.stringify({
+      sendStreamData(res, {
         type: 'analysis_complete',
         time: timeMatch[1].trim(),
         space: spaceMatch[1].trim(),
         explanation: explanationMatch[1].trim()
-      })}\n\n`);
+      });
     } else {
-      // If parsing fails, send the whole response as a fallback
-      res.write(`data: ${JSON.stringify({ type: 'analysis_fallback', text: fullResponse })}\n\n`);
+      // Fallback: Try to extract any complexity mentions
+      const timeAlt = fullResponse.match(/time.*?(O\([^)]+\))/i);
+      const spaceAlt = fullResponse.match(/space.*?(O\([^)]+\))/i);
+      
+      sendStreamData(res, { 
+        type: 'analysis_complete',
+        time: timeAlt ? timeAlt[1] : 'Unable to determine',
+        space: spaceAlt ? spaceAlt[1] : 'Unable to determine',
+        explanation: explanationMatch ? explanationMatch[1].trim() : fullResponse
+      });
     }
+
     res.end();
   } catch (error) {
-    console.error('Code analysis streaming error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to get analysis from AI.' })}\n\n`);
-    res.end();
+    handleStreamError(res, error, 'Code analysis');
   }
 });
 
+// =================================================================
+// === SERVER START                                              ===
+// =================================================================
 app.listen(PORT, () => {
   console.log(`✅ Server listening on http://localhost:${PORT}`);
+  console.log(`📡 Ready to receive requests from extension`);
 });
-
-
