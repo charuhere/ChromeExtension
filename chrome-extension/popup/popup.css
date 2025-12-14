@@ -287,3 +287,7 @@ hr {
   flex: 1;
   margin-bottom: 0;
 }
+
+.footer .back-button {
+  margin-top: 0;
+}

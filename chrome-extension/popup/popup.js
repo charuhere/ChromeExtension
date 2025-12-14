@@ -36,6 +36,7 @@ const elements = {
   hints: {
     content: document.getElementById('hintContent'),
     next: document.getElementById('nextHintBtn'),
+    prev: document.getElementById('prevHintBtn'),
     back: document.getElementById('backFromHintsBtn')
   },
   similar: {
@@ -132,7 +133,7 @@ async function streamFromAPI(endpoint, body, onData, onComplete, onError) {
 
 async function handleGetHints() {
   showView('hints');
-  
+
   const { currentProblem } = await chrome.storage.local.get('currentProblem');
   if (!currentProblem) {
     setErrorState(elements.hints.content, 'No problem detected');
@@ -154,7 +155,7 @@ async function handleGetHints() {
   elements.hints.next.style.display = 'none';
 
   let fullResponse = '';
-  
+
   await streamFromAPI(
     ENDPOINTS.hints,
     { problem: currentProblem },
@@ -163,17 +164,17 @@ async function handleGetHints() {
     },
     () => {
       // Parse hints from response
-      const hintMatches = fullResponse.match(/\*\*Hint \d:\*\*\s*([^\n*]+)/g);
-      
-      if (hintMatches && hintMatches.length > 0) {
-        state.hints = hintMatches.map(h => 
-          h.replace(/\*\*Hint \d:\*\*\s*/, '').trim()
-        );
-        
+      // We look for "**Hint X:**" markers. 
+      // Using split is more robust than regex for capturing full content including newlines and symbols.
+      const parts = fullResponse.split(/\*\*Hint \d:\*\*/).map(p => p.trim()).filter(p => p);
+
+      if (parts.length > 0) {
+        state.hints = parts;
+
         // Cache the hints for this problem
         state.hintsCache[currentProblem] = state.hints;
         console.log('💾 Cached hints for:', currentProblem);
-        
+
         state.currentHintIndex = 0;
         displayCurrentHint();
         updateHintButtons();
@@ -202,19 +203,18 @@ function showPreviousHint() {
 }
 
 function displayCurrentHint() {
-  elements.hints.content.innerHTML = 
+  elements.hints.content.innerHTML =
     `<strong>Hint ${state.currentHintIndex + 1}:</strong> ${state.hints[state.currentHintIndex]}`;
 }
 
 function updateHintButtons() {
   // Show/hide Previous button
-  const prevBtn = document.getElementById('prevHintBtn');
-  if (prevBtn) {
-    prevBtn.style.display = state.currentHintIndex > 0 ? 'block' : 'none';
+  if (elements.hints.prev) {
+    elements.hints.prev.style.display = state.currentHintIndex > 0 ? 'block' : 'none';
   }
-  
+
   // Show/hide Next button
-  elements.hints.next.style.display = 
+  elements.hints.next.style.display =
     state.currentHintIndex < state.hints.length - 1 ? 'block' : 'none';
 }
 
@@ -272,7 +272,7 @@ async function handleAnalyzeCode() {
   setLoadingState(elements.analysis.content, '⏳ Getting code from editor...');
 
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  
+
   chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_USER_CODE' }, async (response) => {
     if (chrome.runtime.lastError || !response) {
       setErrorState(elements.analysis.content, 'Could not communicate with page. Try refreshing.');
@@ -285,7 +285,7 @@ async function handleAnalyzeCode() {
     }
 
     const { currentProblem } = await chrome.storage.local.get('currentProblem');
-    
+
     elements.analysis.content.innerHTML = `
       <div class="analysis-result">
         <div class="complexity-row">
@@ -331,14 +331,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     elements.problemTitle.textContent = currentProblem || 'Problem Detected';
     Object.values(elements.buttons).forEach(btn => btn.disabled = false);
   } else {
-    elements.problemTitle.innerHTML = 
+    elements.problemTitle.innerHTML =
       'Not on a LeetCode problem page. <br><a href="#" id="goToLeetCode">Go to problems →</a>';
-    
+
     document.getElementById('goToLeetCode')?.addEventListener('click', (e) => {
       e.preventDefault();
       chrome.tabs.create({ url: 'https://leetcode.com/problemset/' });
     });
-    
+
     Object.values(elements.buttons).forEach(btn => btn.disabled = true);
   }
 
@@ -349,11 +349,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   elements.hints.back.addEventListener('click', () => showView('menu'));
   elements.hints.next.addEventListener('click', showNextHint);
-  
+
   // Add Previous hint button listener
-  const prevBtn = document.getElementById('prevHintBtn');
-  if (prevBtn) {
-    prevBtn.addEventListener('click', showPreviousHint);
+  if (elements.hints.prev) {
+    elements.hints.prev.addEventListener('click', showPreviousHint);
   }
   elements.similar.back.addEventListener('click', () => showView('menu'));
   elements.analysis.back.addEventListener('click', () => showView('menu'));

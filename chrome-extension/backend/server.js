@@ -10,17 +10,55 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Initialize Groq client
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
 
-console.log('Using GROQ_API_KEY:', process.env.GROQ_API_KEY ? 'Loaded ✅' : 'Not Loaded ❌');
+const PROMPTS = {
+  hints: (problem) => `You are an expert programming coach helping a user solve the LeetCode problem: "${problem}".
 
-// =================================================================
-// === HELPER FUNCTIONS (DRY - Don't Repeat Yourself)           ===
-// =================================================================
+Provide THREE strictly progressive hints in this EXACT format:
 
+**Hint 1:** [Conceptual Hint]
+Give a gentle nudge about the problem type or a key observation (e.g., "This is a Sliding Window problem" or "Think about using a Hash Map") without revealing the solution. Focus on *how* to think about it.
+
+**Hint 2:** [Strategy Hint]
+Explain the specific approach or algorithm to apply. Explain the logic connecting the concept to the solution (e.g., "Use two pointers starting from both ends to find the maximum area...").
+
+**Hint 3:** [Implementation/Code Hint]
+Provide the core formula, main loop logic, or a small helper code snippet. This should practically help them write the code (e.g., "Logic: ans = max(ans, height[i] * width)").
+
+Keep each hint clear, concise, and high-value. Do not waste the user's time with generic advice.`,
+
+  similar: (problem) => `Identify exactly 3 LeetCode problems that use the SAME underlying algorithmic pattern (e.g., Sliding Window, DFS, Two Pointers) as "${problem}". Do NOT match by name similarity.
+
+Sort them by difficulty: 1 Easy, then 1 Medium, then 1 Hard (or slightly harder).
+
+Return ONLY the problem titles, one per line. No difficulty labels, no numbers, no bullets.
+
+Example output format:
+Best Time to Buy and Sell Stock
+Maximum Subarray
+Maximum Product Subarray`,
+
+  analysis: (problem, code) => `Analyze this code for the LeetCode problem "${problem}".
+
+**Code:**
+\`\`\`
+${code}
+\`\`\`
+
+Provide analysis in this EXACT format:
+
+**TIME_COMPLEXITY:** O(?)
+**SPACE_COMPLEXITY:** O(?)
+**EXPLANATION:**
+[2-3 sentences explaining the logic, potential bugs, and improvements]
+
+Be specific about what the code does and any issues.`
+};
+
+// HELPER FUNCTIONS 
 const setStreamHeaders = (res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -34,7 +72,7 @@ const sendStreamData = (res, data) => {
 
 const handleStreamError = (res, error, context) => {
   console.error(`${context} error:`, error.message);
-  const message = error.status === 429 
+  const message = error.status === 429
     ? 'Rate limit exceeded. Please try again in a moment.'
     : `Failed to process request: ${error.message}`;
   sendStreamData(res, { type: 'error', message });
@@ -61,9 +99,6 @@ async function streamGroqResponse(model, messages, onChunk) {
   return fullResponse;
 }
 
-// =================================================================
-// === ENDPOINT 1: Generate Hints                                ===
-// =================================================================
 app.post('/generate-hint-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem } = req.body;
@@ -74,17 +109,7 @@ app.post('/generate-hint-stream', async (req, res) => {
   }
 
   try {
-    const prompt = `You are an expert programming coach for the LeetCode problem: "${problem}".
-
-Provide THREE progressively helpful hints in this EXACT format:
-
-**Hint 1:** [High-level conceptual hint - suggest key data structure or algorithm]
-
-**Hint 2:** [More detailed logic hint - explain how to use the approach from Hint 1]
-
-**Hint 3:** [Implementation detail - provide critical pseudocode or code snippet]
-
-Keep each hint concise (1-2 sentences). No extra text.`;
+    const prompt = PROMPTS.hints(problem);
 
     const fullResponse = await streamGroqResponse(
       'llama-3.3-70b-versatile',
@@ -98,9 +123,6 @@ Keep each hint concise (1-2 sentences). No extra text.`;
   }
 });
 
-// =================================================================
-// === ENDPOINT 2: Similar Problems                              ===
-// =================================================================
 app.post('/similar-problems-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem } = req.body;
@@ -111,14 +133,7 @@ app.post('/similar-problems-stream', async (req, res) => {
   }
 
   try {
-    const prompt = `List exactly 3 LeetCode problems similar to "${problem}".
-Return ONLY the problem titles, one per line.
-No numbers, bullets, or extra text.
-
-Example format:
-Three Sum
-Two Sum II
-Four Sum`;
+    const prompt = PROMPTS.similar(problem);
 
     const fullResponse = await streamGroqResponse(
       'llama-3.3-70b-versatile',
@@ -147,9 +162,6 @@ Four Sum`;
   }
 });
 
-// =================================================================
-// === ENDPOINT 3: Code Analysis                                 ===
-// =================================================================
 app.post('/analyze-code-stream', async (req, res) => {
   setStreamHeaders(res);
   const { problem, code } = req.body;
@@ -160,21 +172,7 @@ app.post('/analyze-code-stream', async (req, res) => {
   }
 
   try {
-    const prompt = `Analyze this code for the LeetCode problem "${problem}".
-
-**Code:**
-\`\`\`
-${code}
-\`\`\`
-
-Provide analysis in this EXACT format:
-
-**TIME_COMPLEXITY:** O(?)
-**SPACE_COMPLEXITY:** O(?)
-**EXPLANATION:**
-[2-3 sentences explaining the logic, potential bugs, and improvements]
-
-Be specific about what the code does and any issues.`;
+    const prompt = PROMPTS.analysis(problem, code);
 
     const fullResponse = await streamGroqResponse(
       'llama-3.3-70b-versatile',
@@ -198,8 +196,8 @@ Be specific about what the code does and any issues.`;
       // Fallback: Try to extract any complexity mentions
       const timeAlt = fullResponse.match(/time.*?(O\([^)]+\))/i);
       const spaceAlt = fullResponse.match(/space.*?(O\([^)]+\))/i);
-      
-      sendStreamData(res, { 
+
+      sendStreamData(res, {
         type: 'analysis_complete',
         time: timeAlt ? timeAlt[1] : 'Unable to determine',
         space: spaceAlt ? spaceAlt[1] : 'Unable to determine',
@@ -213,10 +211,6 @@ Be specific about what the code does and any issues.`;
   }
 });
 
-// =================================================================
-// === SERVER START                                              ===
-// =================================================================
 app.listen(PORT, () => {
-  console.log(`✅ Server listening on http://localhost:${PORT}`);
-  console.log(`📡 Ready to receive requests from extension`);
+  console.log(`Server listening on http://localhost:${PORT}`);
 });
