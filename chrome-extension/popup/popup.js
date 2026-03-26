@@ -13,9 +13,34 @@ const ENDPOINTS = {
 // =================================================================
 const state = {
   hints: [],
-  currentHintIndex: 0,
-  hintsCache: {} // Store hints by problem name
+  currentHintIndex: 0
 };
+
+// =================================================================
+// === CACHE MANAGEMENT (FIFO - Max 5)                           ===
+// =================================================================
+async function getCachedHints(problemName) {
+  const result = await chrome.storage.local.get('hintsCacheData');
+  const cacheData = result.hintsCacheData || {};
+  return cacheData[problemName] || null;
+}
+
+async function saveHintsToCache(problemName, hintsArray) {
+  const result = await chrome.storage.local.get('hintsCacheData');
+  let cacheData = result.hintsCacheData || {};
+  
+  // Update the value without changing its insertion order (FIFO)
+  cacheData[problemName] = hintsArray;
+  
+  const keys = Object.keys(cacheData);
+  if (keys.length > 5) {
+    // Remove the oldest key (the first one inserted)
+    const keysToRemove = keys.slice(0, keys.length - 5);
+    keysToRemove.forEach(k => delete cacheData[k]);
+  }
+  
+  await chrome.storage.local.set({ hintsCacheData: cacheData });
+}
 
 // =================================================================
 // === DOM ELEMENTS (Cached for performance)                     ===
@@ -140,10 +165,11 @@ async function handleGetHints() {
     return;
   }
 
-  // Check if hints already cached for this problem
-  if (state.hintsCache[currentProblem]) {
-    console.log('✅ Loading cached hints for:', currentProblem);
-    state.hints = state.hintsCache[currentProblem];
+  // Check if hints already cached for this problem in chrome.storage
+  const cachedHints = await getCachedHints(currentProblem);
+  if (cachedHints) {
+    console.log('✅ Loading cached hints from storage for:', currentProblem);
+    state.hints = cachedHints;
     state.currentHintIndex = 0;
     displayCurrentHint();
     updateHintButtons();
@@ -171,9 +197,9 @@ async function handleGetHints() {
       if (parts.length > 0) {
         state.hints = parts;
 
-        // Cache the hints for this problem
-        state.hintsCache[currentProblem] = state.hints;
-        console.log('💾 Cached hints for:', currentProblem);
+        // Cache the hints permanently in storage (LRU tracking 5 items)
+        saveHintsToCache(currentProblem, state.hints);
+        console.log('💾 Saved hints to persistent cache for:', currentProblem);
 
         state.currentHintIndex = 0;
         displayCurrentHint();
